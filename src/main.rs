@@ -1,82 +1,30 @@
-//! This example will showcase one way on how to extend Serenity with a
-//! time-scheduler and an event-trigger-system.
-//! We will create a remind-me command that will send a message after a
-//! a demanded amount of time. Once the message has been sent, the user can
-//! react to it, triggering an event to send another message.
-
 mod commands;
 mod ctftime;
 mod embeds;
 mod encryption;
+mod greeting;
+mod planning;
 
-use std::{collections::HashSet, env, hash::{Hash, Hasher},
-    sync::Arc,
-};
+use std::{collections::HashSet, env, sync::Arc,};
 use serenity::{
     prelude::*,
     framework::standard::{
         Args, CommandResult, CommandGroup,
         DispatchError, HelpOptions, help_commands, StandardFramework,
-        macros::{command, group, help},
+        macros::{group, help},
     },
-    http::Http,
     model::prelude::*,
+    model::id::ChannelId
 };
-// We will use this crate as event dispatcher.
-use hey_listen::sync::{ParallelDispatcher as Dispatcher,
-    ParallelDispatcherRequest as DispatcherRequest};
+
 // And this crate to schedule our tasks.
-use white_rabbit::{Utc, Scheduler, DateResult, Duration};
+use white_rabbit::{Scheduler};
 use commands::{ctftime::*, encryption::*, stealer::*, dnsrebind::*};
+use greeting::*;
+use planning::*;
 
-// This enum represents possible events a listener might wait for.
-// In this case, we want to dispatch an event when a reaction is added.
-// Serenity's event-enum is not suitable for this.
-// First it offers too many variants we do not need, but most importantly,
-// it lacks the `Default`-trait which makes sense
-// as the enum-fields have no clear logical default value. But without it,
-// constructing mock-variants becomes difficult.
-//
-// As a result, we make our own slick event-enum!
-#[derive(Clone)]
-enum DispatchEvent {
-    ReactEvent(MessageId, UserId),
-}
-
-// We need to implement equality for our enum.
-// One could test variants only. In this case, we want to know who reacted
-// on which message.
-impl PartialEq for DispatchEvent {
-    fn eq(&self, other: &DispatchEvent) -> bool {
-        match (self, other) {
-            (DispatchEvent::ReactEvent(self_message_id, self_user_id),
-            DispatchEvent::ReactEvent(other_message_id, other_user_id)) => {
-                self_message_id == other_message_id &&
-                self_user_id == other_user_id
-            }
-        }
-    }
-}
-
-impl Eq for DispatchEvent {}
-
-// See following Clippy-lint:
-// https://rust-lang.github.io/rust-clippy/master/index.html#derive_hash_xor_eq
-impl Hash for DispatchEvent {
-    fn hash<H: Hasher>(&self, state: &mut H) {
-        match self {
-            DispatchEvent::ReactEvent(msg_id, user_id) => {
-                msg_id.hash(state);
-                user_id.hash(state);
-            }
-        }
-    }
-}
-
-struct DispatcherKey;
-impl TypeMapKey for DispatcherKey {
-    type Value = Arc<RwLock<Dispatcher<DispatchEvent>>>;
-}
+use chrono::{Utc, Duration,TimeZone};
+use std::str::FromStr;
 
 struct SchedulerKey;
 impl TypeMapKey for SchedulerKey {
@@ -85,38 +33,64 @@ impl TypeMapKey for SchedulerKey {
 
 struct Handler;
 impl EventHandler for Handler {
-    // We want to dispatch an event whenever a new reaction has been added.
-    fn reaction_add(&self, context: Context, reaction: Reaction) {
-        let dispatcher = {
-            let mut context = context.data.write();
-            context.get_mut::<DispatcherKey>().expect("Expected Dispatcher.").clone()
-        };
+  
+    fn ready(&self, ctx: Context, ready: Ready) {
+        println!("{} is connected!", ready.user.name);
 
-        dispatcher.write().dispatch_event(
-            &DispatchEvent::ReactEvent(reaction.message_id, reaction.user_id));
+//For now add Letz cyber security event manually. Need a better way (Database/Github?) in the future...
+        let channel_id = ChannelId::from_str("635136457643786280").unwrap();
+        let test_event = planning::Event {
+            title: "Lëtz Cybersecurity Challenge 2020".to_string(),
+            description: 
+"**IMPORTANT: To participate you MUST register again on 03/04/2020 between 16:00 and 18:00 (not earlier and not later)**
+
+The Lëtz Cybersecurity Challenge provides 24 challenges for 24 hours of fun.
+
+__The competition is divided in two parts:__
+
+**Part1**
+Start on 03/04/2020 at 18:00 (it might take some time until all challenges will be uploaded)
+End on 04/04/2020 at 06:00
+Challenges in all categories of low and medium complexity
+
+**Part2**
+Start on 04/04/2020 at 12:00 (noon) (it might take some time until all challenges will be uploaded)
+End on 04/04/2020 at 24:00 (midnight)
+Challenges in all categories of medium and higher complexity
+
+**Flag format**
+LCSC{FLAG-TO-FIND}
+The flags are cases insensitive: LCSC{FLAG-TO-FIND} is equivalent to 
+LCSC{FLaG-To-Find}
+But: it might be that you will find flags in format VSC{FLAG-TO-FIND}. You just have to replace VSC by LCSC.
+".to_string(),
+            duration: Duration::hours(30),
+            format: "Jeopardy".to_string(),
+            logo: "https://ctf.cybersecuritychallenge.lu/files/245f6f5845e9a891f5bc7a071fd7f0c3/CSChallenge-2020.png".to_string(),
+            start: Utc.ymd(2020, 04, 03).and_hms(16, 00, 0),
+            url: "https://2020.cybersecuritychallenge.lu/register".to_string()
+
+            
+        };
+        add_default_reminders_for_event(&ctx, &test_event, channel_id);
     }
 
-    fn ready(&self, cx: Context, ready: Ready) {
-        println!("{} is connected!", ready.user.name);
-        /*
-        let channel_id = ChannelId::from_str("641800908874711040").unwrap();
-        let temp = event_to_embed(test_event);
-        let message = channel_id.send_message(cx.http.clone(), |m| {m.embed(|e| {*e = temp; e})}).unwrap();
-        let white_check_mark = ReactionType::from("✅");
-        message.react(&cx, white_check_mark).unwrap();
-*/
+    fn guild_member_addition(
+        &self,
+        ctx: Context,
+        _guild_id: GuildId,
+        new_member: Member
+    ) {
+        greet_new_member(&ctx, &new_member);
     }
 }
 
-group!({
-    name: "general",
-    options: {},
-    commands: [event, upcoming, set_reminder, b64e, b64d, cookiestealer, dnsstealer, dnsrebind],
-});
+#[group]
+#[commands(event, upcoming, b64e, b64d, cookiestealer, dnsstealer, dnsrebind)]
+struct General;
 
 #[help]
-// Some arguments require a `{}` in order to replace it with contextual information.
-// In this case our `{}` refers to a command's name.
+// `{}` refers to a command's name.
 #[command_not_found_text = "Could not find: `{}`."]
 // Define the maximum Levenshtein-distance between a searched command-name
 // and commands. If the distance is lower than or equal the set distance,
@@ -152,12 +126,6 @@ fn main() {
         let scheduler = Scheduler::new(4);
         let scheduler = Arc::new(RwLock::new(scheduler));
 
-        let mut dispatcher: Dispatcher<DispatchEvent> = Dispatcher::default();
-        // Once receiving an event to dispatch, the amount of threads
-        // set via `num_threads` will dispatch in parallel.
-        dispatcher.num_threads(4).expect("Could not construct threadpool");
-
-        data.insert::<DispatcherKey>(Arc::new(RwLock::new(dispatcher)));
         data.insert::<SchedulerKey>(scheduler);
     }
 
@@ -194,105 +162,4 @@ fn main() {
     if let Err(why) = client.start() {
         println!("Client error: {:?}", why);
     }
-}
-
-// Just a helper-function for creating the closure we want to use as listener.
-// It saves us from writing the same trigger twice for repeated and non-repeated
-// tasks (see remind-me command below).
-fn thanks_for_reacting(http: Arc<Http>, channel: ChannelId) ->
-    Box<dyn Fn(&DispatchEvent) -> Option<DispatcherRequest> + Send + Sync> {
-
-    Box::new(move |_| {
-        if let Err(why) = channel.say(&http, "Thanks for reacting!") {
-            println!("Could not send message: {:?}", why);
-        }
-
-        Some(DispatcherRequest::StopListening)
-    })
-}
-
-#[command]
-#[aliases("add")]
-fn set_reminder(context: &mut Context, msg: &Message, mut args: Args) -> CommandResult {
-    // It might be smart to set a moderately high minimum value for `time`
-    // to avoid abuse like tasks that repeat every 100ms, especially since
-    // channels have send-message rate limits.
-    let time: u64 = args.single()?;
-    let repeat: bool = args.single()?;
-    let args = args.rest().to_string();
-
-    let scheduler = {
-        let mut context = context.data.write();
-        context.get_mut::<SchedulerKey>().expect("Expected Scheduler.").clone()
-    };
-
-    let dispatcher = {
-        let mut context = context.data.write();
-        context.get_mut::<DispatcherKey>().expect("Expected Dispatcher.").clone()
-    };
-
-    let http = context.http.clone();
-    let msg = msg.clone();
-
-    let mut scheduler = scheduler.write();
-
-    // First, we check if the user wants a repeated task or not.
-    if repeat {
-        // Chrono's duration can also be negative
-        // and therefore we cast to `i64`.
-        scheduler.add_task_duration(Duration::milliseconds(time as i64), move |_| {
-            let bot_msg = match msg.channel_id.say(&http, &args) {
-                Ok(msg) => msg,
-                // We could not send the message, thus we will try sending it
-                // again in five seconds.
-                // It might be wise to keep a counter for maximum tries.
-                // If the channel got deleted, trying to send a message will
-                // always fail.
-                Err(why) => {
-                    println!("Error sending message: {:?}.", why);
-
-                    return DateResult::Repeat(
-                        Utc::now() + Duration::milliseconds(5000))
-                },
-            };
-
-            let http = http.clone();
-
-            // We add a function to dispatch for a certain event.
-            dispatcher.write()
-                .add_fn(DispatchEvent::ReactEvent(bot_msg.id, msg.author.id),
-                    // The `thanks_for_reacting`-function creates a function
-                    // to schedule.
-                    thanks_for_reacting(http, bot_msg.channel_id));
-
-            // We return that our date shall happen again, therefore we need
-            // to tell when this shall be.
-            DateResult::Repeat(Utc::now() + Duration::milliseconds(time as i64))
-        });
-    } else {
-        // Pretty much identical with the `true`-case except for the returned
-        // variant.
-        scheduler.add_task_duration(Duration::milliseconds(time as i64), move |_| {
-            let bot_msg = match msg.channel_id.say(&http, &args) {
-                Ok(msg) => msg,
-                Err(why) => {
-                    println!("Error sending message: {:?}.", why);
-
-                    return DateResult::Repeat(
-                        Utc::now() + Duration::milliseconds(5000)
-                    )
-                },
-            };
-            let http = http.clone();
-
-            dispatcher.write()
-                .add_fn(DispatchEvent::ReactEvent(bot_msg.id, msg.author.id),
-                    thanks_for_reacting(http, bot_msg.channel_id));
-
-            // The task is done and that's it, we don't need to repeat it.
-            DateResult::Done
-        });
-    };
-
-    Ok(())
 }

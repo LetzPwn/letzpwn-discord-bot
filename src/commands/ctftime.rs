@@ -9,7 +9,7 @@ use serenity::{
 use crate::ctftime;
 
 #[command]
-#[description = "Shows a speicfic CTF event, given its ID."]
+#[description = "Shows a specific CTF event, given its ID."]
 pub fn event(ctx: &mut Context, msg: &Message, mut args: Args) -> CommandResult {
     let ctftime_id = args.single::<u32>().unwrap();
     let event = ctftime::get_event(ctftime_id)?;
