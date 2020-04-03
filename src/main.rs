@@ -35,7 +35,19 @@ struct Handler;
 impl EventHandler for Handler {
   
     fn ready(&self, ctx: Context, ready: Ready) {
+
         println!("{} is connected!", ready.user.name);
+
+        //Remove old scheduler, this should cause drop being called on scheduler and remove all planned events. 
+        //We will re-add them in the next lines 
+        //We need to add this, because ready() can be called multiple times(internet conenction being lost etc.). This would cause the
+        //scheduler to add the events multiple times
+        ctx.data.write().remove::<SchedulerKey>();
+
+        //Create new 
+        let scheduler = Scheduler::new(4);
+        let scheduler = Arc::new(RwLock::new(scheduler));
+        ctx.data.write().insert::<SchedulerKey>(scheduler);
 
 //For now add Letz cyber security event manually. Need a better way (Database/Github?) in the future...
         let channel_id = ChannelId::from_str("635136457643786280").unwrap();
@@ -118,11 +130,7 @@ fn main() {
 
     {
         let mut data = client.data.write();
-        // We create a new scheduler with 4 internal threads. Why 4? It really
-        // is just an arbitrary number, you are often better setting this
-        // based on your CPU.
-        // When a task is due, a thread from the threadpool will be used to
-        // avoid blocking the scheduler thread.
+
         let scheduler = Scheduler::new(4);
         let scheduler = Arc::new(RwLock::new(scheduler));
 
