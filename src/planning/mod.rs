@@ -17,6 +17,21 @@ pub struct Event {
     pub logo: String,
 }
 
+use crate::ctftime;
+
+impl From<ctftime::Event> for Event {
+    fn from(event: ctftime::Event) -> Self {
+        Event {
+            title: event.title,
+            description: event.description,
+            url: event.url,
+            format: event.format,
+            start: event.start,
+            duration: Duration::hours((event.duration.days * 24 + event.duration.hours) as i64),
+            logo: event.logo
+        }
+    }
+}
 use serenity::builder::CreateEmbed;
 
 pub fn add_reminder_for_event(ctx: &Context, event: &Event, duration_before: Duration, channel: ChannelId, message: String, embed_event: bool) {
@@ -51,21 +66,11 @@ pub fn add_default_reminders_for_event(ctx: &Context, event: &Event, channel: Ch
     }
     if Utc::now() <= event.start - Duration::hours(1) {
         add_reminder_for_event(ctx, event, Duration::hours(1), channel, 
-            format!("{} will start in 1 hour, get ready to pwn!", event.title).to_string(), true);
+            format!("{} will start in 1 hour. As usual check the #access-control channel or ask the admin to get the login/team password!", event.title).to_string(), true);
     }
-    if Utc::now() <= event.start - Duration::seconds(3) {
-        add_reminder_for_event(ctx, event, Duration::seconds(3), channel, 
-            format!("{} starts in 3", event.title).to_string(), false);
-        
-    }
-    if Utc::now() <= event.start - Duration::seconds(2) {
-        add_reminder_for_event(ctx, event, Duration::seconds(2), channel, 
-            format!("2").to_string(), false);
-        
-    }
-    if Utc::now() <= event.start - Duration::seconds(1) {
-        add_reminder_for_event(ctx, event, Duration::seconds(1), channel, 
-            format!("1").to_string(), false);
+    if Utc::now() <= event.start - Duration::minutes(5) {
+        add_reminder_for_event(ctx, event, Duration::minutes(5), channel, 
+            format!("{} starts in 5 minutes!", event.title).to_string(), false);
         
     }
     if Utc::now() <= event.start - Duration::seconds(0) {

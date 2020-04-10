@@ -49,41 +49,10 @@ impl EventHandler for Handler {
         let scheduler = Arc::new(RwLock::new(scheduler));
         ctx.data.write().insert::<SchedulerKey>(scheduler);
 
-//For now add Letz cyber security event manually. Need a better way (Database/Github?) in the future...
         let channel_id = ChannelId::from_str("635136457643786280").unwrap();
-        let test_event = planning::Event {
-            title: "Lëtz Cybersecurity Challenge 2020".to_string(),
-            description: 
-"**IMPORTANT: To participate you MUST register again on 03/04/2020 between 16:00 and 18:00 (not earlier and not later)**
-
-The Lëtz Cybersecurity Challenge provides 24 challenges for 24 hours of fun.
-
-__The competition is divided in two parts:__
-
-**Part1**
-Start on 03/04/2020 at 18:00 (it might take some time until all challenges will be uploaded)
-End on 04/04/2020 at 06:00
-Challenges in all categories of low and medium complexity
-
-**Part2**
-Start on 04/04/2020 at 12:00 (noon) (it might take some time until all challenges will be uploaded)
-End on 04/04/2020 at 24:00 (midnight)
-Challenges in all categories of medium and higher complexity
-
-**Flag format**
-LCSC{FLAG-TO-FIND}
-The flags are cases insensitive: LCSC{FLAG-TO-FIND} is equivalent to 
-LCSC{FLaG-To-Find}
-But: it might be that you will find flags in format VSC{FLAG-TO-FIND}. You just have to replace VSC by LCSC.
-".to_string(),
-            duration: Duration::hours(30),
-            format: "Jeopardy".to_string(),
-            logo: "https://ctf.cybersecuritychallenge.lu/files/245f6f5845e9a891f5bc7a071fd7f0c3/CSChallenge-2020.png".to_string(),
-            start: Utc.ymd(2020, 04, 03).and_hms(16, 00, 0),
-            url: "https://2020.cybersecuritychallenge.lu/register".to_string()
-
-            
-        };
+        
+        //For now add planned events manually. Need a better way (Database/Github?) in the future...
+        let test_event: planning::Event = ctftime::get_event(1030).unwrap().into();
         add_default_reminders_for_event(&ctx, &test_event, channel_id);
     }
 
