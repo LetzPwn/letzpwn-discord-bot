@@ -1,3 +1,7 @@
+use std::error::Error;
+use std::fs::OpenOptions;
+use std::io::{BufReader, BufWriter};
+use std::path::Path;
 use crate::SchedulerKey;
 use chrono::{DateTime, Utc};
 use white_rabbit::{Duration, DateResult};
@@ -5,19 +9,24 @@ use serenity::{
     prelude::*,
     model::id::ChannelId,
 };
+use serde::{Serialize, Deserialize};
 
-#[derive(Debug, Clone)]
+#[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct Event {
     pub title: String,
     pub description: String,
     pub url: String,
     pub format: String,
     pub start: DateTime<Utc>,
-    pub duration: Duration,
+    pub duration: ctftime::Duration,
     pub logo: String,
 }
 
 use crate::ctftime;
+
+
+pub const EVENT_REMINDER_CHANNEL: &str = "635136457643786280";
+pub const EVENT_STORAGE_FILE: &str = "planned_events.json";
 
 impl From<ctftime::Event> for Event {
     fn from(event: ctftime::Event) -> Self {
@@ -27,12 +36,41 @@ impl From<ctftime::Event> for Event {
             url: event.url,
             format: event.format,
             start: event.start,
-            duration: Duration::hours((event.duration.days * 24 + event.duration.hours) as i64),
+            duration: event.duration,
             logo: event.logo
         }
     }
 }
+
+impl From<&ctftime::Duration> for Duration {
+    fn from(duration: &ctftime::Duration) -> Self {
+        Duration::hours((duration.days * 24 + duration.hours) as i64)
+    }
+}
+
 use serenity::builder::CreateEmbed;
+
+pub fn read_events_from_file<P: AsRef<Path>>(path: P) -> Result<Vec<Event>, Box<dyn Error>> {
+    // Open the file in read-only mode with buffer.
+    let file = OpenOptions::new().read(true).open(path)?;
+    let reader = BufReader::new(file);
+
+    // Read the JSON contents of the file as an instance of `User`.
+    let events = serde_json::from_reader(reader)?;
+
+    // Return the `User`.
+    Ok(events)
+}
+
+pub fn add_event_to_file<P: Copy +  AsRef<Path>>(path: P, event: &Event) -> Result<Vec<Event>, Box<dyn Error>> {
+    let mut events = read_events_from_file(path).unwrap_or(Vec::<Event>::new()); 
+    events.push(event.clone());
+    let file = OpenOptions::new().write(true).create(true).open(path)?;
+    let writer = BufWriter::new(file);
+    serde_json::to_writer(writer, &events)?;
+    println!("Wrote event to storage file");
+    Ok(events)
+}
 
 pub fn add_reminder_for_event(ctx: &Context, event: &Event, duration_before: Duration, channel: ChannelId, message: String, embed_event: bool) {
     let scheduler = {
@@ -48,7 +86,7 @@ pub fn add_reminder_for_event(ctx: &Context, event: &Event, duration_before: Dur
             channel.send_message(&http, |m| {m.embed(|e| {*e = embed.clone(); e})}).unwrap();
          }
          DateResult::Done
-        });
+     });
 }
 
 pub fn add_default_reminders_for_event(ctx: &Context, event: &Event, channel: ChannelId) {
@@ -78,8 +116,8 @@ pub fn add_default_reminders_for_event(ctx: &Context, event: &Event, channel: Ch
             format!("{} started, go go go! Let'z Pwn!", event.title).to_string(), true);
         
     }
-    if Utc::now() <= event.start + event.duration {
-        add_reminder_for_event(ctx, event, -event.duration, channel, 
+    if Utc::now() <= event.start + Duration::from(&event.duration) {
+        add_reminder_for_event(ctx, event, - Duration::from(&event.duration), channel, 
             format!("Good job everyone, {} should be over. If you solved some interesting challenges, don't forget to post your writeups in our github repo: https://github.com/LetzPwn/ctf-writeups", event.title).to_string(), false);
     }
 }

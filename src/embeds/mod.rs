@@ -35,7 +35,7 @@ impl From<ctftime::Event> for CreateEmbed {
 impl From<planning::Event> for CreateEmbed {
     fn from(event: planning::Event) -> Self {
         let footer_text = format!("");
-        let duration_text = format!("{} days, {} hours", event.duration.num_days(), event.duration.num_hours() % 24);
+        let duration_text = format!("{} days, {} hours", event.duration.days, event.duration.hours);
         let local_time : DateTime<Local>  = event.start.into();
         let mut e = CreateEmbed::default();
 

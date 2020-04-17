@@ -19,11 +19,10 @@ use serenity::{
 
 // And this crate to schedule our tasks.
 use white_rabbit::{Scheduler};
-use commands::{ctftime::*, encryption::*, stealer::*, dnsrebind::*};
+use commands::{ctftime::*, encryption::*, stealer::*, dnsrebind::*, planning::*};
 use greeting::*;
 use planning::*;
 
-use chrono::{Utc, Duration,TimeZone};
 use std::str::FromStr;
 
 struct SchedulerKey;
@@ -50,10 +49,11 @@ impl EventHandler for Handler {
         ctx.data.write().insert::<SchedulerKey>(scheduler);
 
         let channel_id = ChannelId::from_str("635136457643786280").unwrap();
-        
-        //For now add planned events manually. Need a better way (Database/Github?) in the future...
-        let test_event: planning::Event = ctftime::get_event(1030).unwrap().into();
-        add_default_reminders_for_event(&ctx, &test_event, channel_id);
+
+        match read_events_from_file(planning::EVENT_STORAGE_FILE) {
+            Ok(events) => events.iter().for_each(|e| add_default_reminders_for_event(&ctx, &e, channel_id)),
+            Err(err) => println!("Couldn't read planned_events.json: {}", err)
+        }
     }
 
     fn guild_member_addition(
@@ -67,7 +67,7 @@ impl EventHandler for Handler {
 }
 
 #[group]
-#[commands(event, upcoming, b64e, b64d, cookiestealer, dnsstealer, dnsrebind)]
+#[commands(event, upcoming, b64e, b64d, cookiestealer, dnsstealer, dnsrebind, plan, plan_list)]
 struct General;
 
 #[help]
